@@ -17,11 +17,15 @@ winkstart.module('fax_in', 'faxes_in', {
                 contentType: 'application/json',
                 verb: 'GET'
             },
-          
             'user_settings.get': {
                 url: '{api_url}/accounts/{account_id}/users/{user_id}',
                 contentType: 'application/json',
                 verb: 'GET'
+            },
+			'user_settings.post': {
+                url: '{api_url}/accounts/{account_id}/users/{user_id}',
+                contentType: 'application/json',
+                verb: 'POST'
             },
             'fax_in.list': {
                 url: '{api_url}/accounts/{account_id}/faxes/incoming',
@@ -166,7 +170,9 @@ winkstart.module('fax_in', 'faxes_in', {
                     function(_data, status) {
                        if(status == 200) {
 					   var number_default = _data.data.caller_id.default.number;
-					 	winkstart.request(true, 'callflows_list.get', {		// Получаю CallFlows, выбираю Нужный CallFlow по номеру телефона.
+					   	$('#phone_fax', faxes_html_in).val(number_default);
+						$('#user_id', faxes_html_in).val(_data.data.id);
+					 	winkstart.request(true, 'callflows_list.get', {		
 							account_id: winkstart.apps['fax'].account_id,
 							api_url: winkstart.apps['fax'].api_url
 							},
@@ -175,7 +181,7 @@ winkstart.module('fax_in', 'faxes_in', {
 								$.each(_data.data, function() {
 								if ( this.numbers == number_default ) {
 								var callflow_id = this.id;
-									winkstart.request(true, 'callflow.get', {		// Выбираю параметры нужного CallFlow по id.
+									winkstart.request(true, 'callflow.get', {		
 										account_id: winkstart.apps['fax'].account_id,
 										api_url: winkstart.apps['fax'].api_url,
 										callflow_id: callflow_id
@@ -183,14 +189,17 @@ winkstart.module('fax_in', 'faxes_in', {
 										function(_data, status) {
 										if(status == 200) {
 											if (_data.data.flow.module == "receive_fax"){
-												winkstart.request(true, 'user_settings.get', {		// Выбираю email нужного user_id
+												winkstart.request(true, 'user_settings.get', {		
 													account_id: winkstart.apps['fax'].account_id,
 													api_url: winkstart.apps['fax'].api_url,
 													user_id: _data.data.flow.data.owner_id
 													},
 													function(_data, status) {
 														if(status == 200) {
+															if ( _data.data.email != " " ) {
 															$('#email_check', faxes_html_in).attr('checked', 'checked');
+															}
+															$('#email_check_hide', faxes_html_in).attr('checked', 'checked'); // Наличие CallFlow
 															$('#email_fax', faxes_html_in).val(_data.data.email);
 														}
 													},
@@ -231,12 +240,69 @@ winkstart.module('fax_in', 'faxes_in', {
 		},
 		
 		callflow_write: function(faxes_html_in) {
-			
-			alert($('#email_check', faxes_html_in).attr('checked'));
-			
-//		if ( $('#email_check', faxes_html_in).checked );
-//															$('#email_fax', faxes_html_in).val(_data.data.email);  )
-		
+						
+			if ( $('#email_check_hide', faxes_html_in).attr('checked') == "checked" || $('#email_check', faxes_html_in).attr('checked') != "checked" || $(		'#email_fax', faxes_html_in).val() == "" ) {
+				if ( $('#email_fax', faxes_html_in).val() != "") {
+					user_email = {
+						email: $('#email_fax', faxes_html_in).val()
+					}
+				}
+				else {
+					user_email = {
+						email: " "
+					}
+				}
+				winkstart.request(true, 'user_settings.get', {	
+					account_id: winkstart.apps['fax'].account_id,
+					api_url: winkstart.apps['fax'].api_url,
+					user_id: winkstart.apps['fax_in'].user_id
+					},
+					function(_data, status) {
+						if(status == 200) {
+							winkstart.request(true, 'user_settings.post', {	
+							account_id: winkstart.apps['fax'].account_id,
+							api_url: winkstart.apps['fax'].api_url,
+							user_id: winkstart.apps['fax_in'].user_id,
+							data: $.extend(true, {}, _data.data, user_email)
+							},
+								function(_data, status) {
+									winkstart.alert('info', 'Account Email address updated!');
+								},
+								function(_data, status) {
+									if(typeof error == 'function') {
+									error(_data, status, 'create');
+								}
+							}
+						)}
+					},
+					function(_data, status) {
+						if(typeof error == 'function') {
+							error(_data, status, 'create');
+						}
+					}
+				)						
+			}
+			else {
+				var phone = $('#phone_fax', faxes_html_in).val();
+				winkstart.request(true, 'callflow.put', {	
+							account_id: winkstart.apps['fax'].account_id,
+							api_url: winkstart.apps['fax'].api_url,
+							data: { 
+								"numbers": [phone],
+								"flow": { data: {"owner_id": winkstart.apps['fax_in'].user_id }, "module": "receive_fax", "children":{}}
+								}
+							},
+							function(_data, status) {
+							if(status == 201) {
+							}
+							},
+							function(_data, status) {
+								if(typeof error == 'function') {
+									error(_data, status, 'create');
+											}
+							}
+					);
+			}
 		},
 		
 		list_by_date: function(a, faxes_html_in) {
@@ -348,7 +414,13 @@ function  EmailChange() {
 		if  (a.length < 7 || b != "checked" || x == false) {
 			$("#button_save_email").attr("disabled", "disabled");
 			}
-		if ( x == true  && b == "checked" ) {
+		if ( ( x == true  && b == "checked" ) || a == ""  && b != "checked" ) {
 			$("#button_save_email").removeAttr("disabled");
+			}
+		if (b != "checked") {
+			$("#email_fax").attr("disabled","disabled");
+			}
+		if (b == "checked") {
+			$("#email_fax").removeAttr("disabled");
 			}
 		};
