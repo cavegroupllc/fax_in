@@ -27,6 +27,31 @@ winkstart.module('fax_in', 'faxes_in', {
                 url: '{api_url}/accounts/{account_id}/faxes/incoming',
                 contentType: 'application/json',
                 verb: 'GET'
+            },
+			'fax_in.raw': {
+                url: '{api_url}/accounts/{account_id}/faxes/incoming/{fax_id}/raw',
+                contentType: 'application/json',
+                verb: 'GET'
+            },
+			'callflows_list.get': {
+                url: '{api_url}/accounts/{account_id}/callflows',
+                contentType: 'application/json',
+                verb: 'GET'
+            },
+			'callflow.get': {
+                url: '{api_url}/accounts/{account_id}/callflows/{callflow_id}',
+                contentType: 'application/json',
+                verb: 'GET'
+            },
+			'callflow.put': {
+                url: '{api_url}/accounts/{account_id}/callflows',
+                contentType: 'application/json',
+                verb: 'PUT'
+            },
+			'callflow.post': {
+                url: '{api_url}/accounts/{account_id}/callflows/{callflow_id}',
+                contentType: 'application/json',
+                verb: 'POST'
             }
         }
     },
@@ -77,7 +102,6 @@ winkstart.module('fax_in', 'faxes_in', {
 						
             THIS.get_settings(function(_data_settings) {
                 faxes_html_in = THIS.templates.faxes_in.tmpl(_data_settings);	
-		
 		$.datepicker.setDefaults(
 			$.extend($.datepicker.regional["ru"])
 		);
@@ -111,6 +135,11 @@ winkstart.module('fax_in', 'faxes_in', {
 			$('#searchLink', faxes_html_in).click(function() {
 				winkstart.table.user_fax.fnClearTable();
             });
+			$( "#button_save_email", faxes_html_in).click( function () { fax_callflow_write();	})
+			
+			function fax_callflow_write() {
+				THIS.callflow_write(faxes_html_in);
+			}
 			
 			function list_update() {
 				THIS.list_by_date("change",faxes_html_in);
@@ -122,12 +151,95 @@ winkstart.module('fax_in', 'faxes_in', {
 
                 //Hack to display columns properly
                 $('.dataTables_scrollHeadInner, .dataTables_scrollHeadInner table', faxes_html_in).attr('style', 'width:100%');
-	
+		
 		THIS.list_by_date();
+		THIS.callflow_read(faxes_html_in);
             });
         },
 		
-        list_by_date: function(a, faxes_html_in) {
+        
+		callflow_read: function(faxes_html_in) {
+			winkstart.request('fax_account.get', { // Узнаю номер _data.data.caller_id.default.number
+                    account_id: winkstart.apps['fax'].account_id,
+                    api_url: winkstart.apps['fax'].api_url, 
+                    },
+                    function(_data, status) {
+                       if(status == 200) {
+					   var number_default = _data.data.caller_id.default.number;
+					 	winkstart.request(true, 'callflows_list.get', {		// Получаю CallFlows, выбираю Нужный CallFlow по номеру телефона.
+							account_id: winkstart.apps['fax'].account_id,
+							api_url: winkstart.apps['fax'].api_url
+							},
+							function(_data, status) {
+							if(status == 200) {
+								$.each(_data.data, function() {
+								if ( this.numbers == number_default ) {
+								var callflow_id = this.id;
+									winkstart.request(true, 'callflow.get', {		// Выбираю параметры нужного CallFlow по id.
+										account_id: winkstart.apps['fax'].account_id,
+										api_url: winkstart.apps['fax'].api_url,
+										callflow_id: callflow_id
+										},
+										function(_data, status) {
+										if(status == 200) {
+											if (_data.data.flow.module == "receive_fax"){
+												winkstart.request(true, 'user_settings.get', {		// Выбираю email нужного user_id
+													account_id: winkstart.apps['fax'].account_id,
+													api_url: winkstart.apps['fax'].api_url,
+													user_id: _data.data.flow.data.owner_id
+													},
+													function(_data, status) {
+														if(status == 200) {
+															$('#email_check', faxes_html_in).attr('checked', 'checked');
+															$('#email_fax', faxes_html_in).val(_data.data.email);
+														}
+													},
+													function(_data, status) {
+														if(typeof error == 'function') {
+															error(_data, status, 'create');
+														}
+													}
+												)
+											
+											}
+										}
+										},
+										function(_data, status) {
+										if(typeof error == 'function') {
+											error(_data, status, 'create');
+											}
+										}
+									); 
+								}
+								});
+							}
+							},
+							function(_data, status) {
+								if(typeof error == 'function') {
+									error(_data, status, 'create');
+								}
+							}
+						); 
+                      }
+                    },
+                    function(_data, status) {
+                        if(typeof error == 'function') {
+                            error(_data, status, 'create');
+                        }
+                    }
+                );
+		},
+		
+		callflow_write: function(faxes_html_in) {
+			
+			alert($('#email_check', faxes_html_in).attr('checked'));
+			
+//		if ( $('#email_check', faxes_html_in).checked );
+//															$('#email_fax', faxes_html_in).val(_data.data.email);  )
+		
+		},
+		
+		list_by_date: function(a, faxes_html_in) {
             var THIS = this;
 			if ( a == "change" ) { winkstart.table.user_fax_in.fnClearTable(); }
 			start_date1 = $( "#start_date" , faxes_html_in).val();
@@ -161,26 +273,26 @@ winkstart.module('fax_in', 'faxes_in', {
 					var tmp = 0;
 					var tmp_status = "completed"
                     $.each(_data.data, function() {
-                   	   
-							created_time = new Date((this.created - 62167219200) * 1000);
+						
+							created_time = new Date();
+							created_time = new Date(created_time.setTime(this.timestamp / 1000));
 							var month = created_time.getMonth()+1 < 10 ? '0'+(created_time.getMonth()+1) : created_time.getMonth()+1;
 							var day = created_time.getDate() < 10 ? '0'+created_time.getDate() : created_time.getDate();
 							var hour = created_time.getHours()+1 < 10 ? '0'+(created_time.getHours()) : created_time.getHours();
 							var minute = created_time.getMinutes() < 10 ? '0'+created_time.getMinutes() : created_time.getMinutes();
+						
+						if (created_time <= end_date && created_time >= start_date) {
 							
-							if (created_time <= end_date && created_time >= start_date) {
-							
-							created_time = day + '.' + month + '.'  + created_time.getFullYear() + ' / ' + hour + ':' + minute;
-							
-							if (this.created > tmp) {
-							tmp = this.created;
-							tmp_status = this.status;
-						   } 
+							created_time1 = day + '.' + month + '.'  + created_time.getFullYear() + ' / ' + hour + ':' + minute;
+						   
+						   fax_in_link = winkstart.apps['fax_in'].api_url + '/accounts/' + winkstart.apps['fax_in'].account_id + '/faxes/incoming/' + this.id + '/attachment?auth_token=' + winkstart.apps['fax_in'].auth_token;
+						   fax_in_link_1 = "<a href='" + fax_in_link + "'><span class='icon medium download' alt='Download' style='background-position: -732px -6px; height: 20px;'/></a>";
 						   
                             tab_data_in.push([
-                                created_time,
-								this.to,
-								this.status   
+                                created_time1,
+								this.total_pages,
+								fax_in_link_1,
+								created_time
                             ]);
 							}
               
@@ -188,17 +300,25 @@ winkstart.module('fax_in', 'faxes_in', {
 									
                var columns = [
                 {
-                    'sTitle': 'Дата',
-                    'sWidth': '250px'
+                    'sTitle': 'Дата / Время',
+                    'sWidth': '450px'
                 },
 
+           //     {
+          //          'sTitle': 'Набранный номер',
+          //          'sWidth': '350px'
+           //     },
                 {
-                    'sTitle': 'Набранный номер',
-                    'sWidth': '350px'
+                    'sTitle': 'Количество страниц',
+                    'sWidth': '360px'
                 },
                 {
-                    'sTitle': 'Статус',
-                    'sWidth': '160px'
+                    'sTitle': 'Скачать',
+                    'sWidth': '260px'
+                },
+                {
+                    'sTitle': 'Created',
+                'bVisible': false
                 }
             ];
 					if (a == "change") {
@@ -208,7 +328,7 @@ winkstart.module('fax_in', 'faxes_in', {
 					winkstart.table.create('user_fax_in', $('#user_faxes_in-grid', faxes_html_in), columns, {}, {
                 sDom: '<"date">frtlip',
                 sScrollY: '222px',
-                aaSorting: [[0, 'desc']]
+                aaSorting: [[3, 'desc']]
             });
 	
                    winkstart.table.user_fax_in.fnAddData(tab_data_in);
@@ -218,3 +338,17 @@ winkstart.module('fax_in', 'faxes_in', {
         }
 });
 		
+function  EmailChange() {
+		var a = $("#email_fax").val();
+		var b = $("#email_check").attr("checked");
+		var x = false;
+		if ( a.length >= 7 && b == "checked" ) {
+			x = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/.test(a);
+			}
+		if  (a.length < 7 || b != "checked" || x == false) {
+			$("#button_save_email").attr("disabled", "disabled");
+			}
+		if ( x == true  && b == "checked" ) {
+			$("#button_save_email").removeAttr("disabled");
+			}
+		};
