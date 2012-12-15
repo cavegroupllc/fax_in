@@ -68,7 +68,7 @@ winkstart.module('fax_in', 'faxes_in', {
 		winkstart.publish('whappnav.subnav.add', {
 			whapp: 'fax_in',
 			module: this.__module,
-			label: 'Полученные факсы',
+			label: 'Received Faxes',
 			icon: 'device', /* Check the icon.css file in whapps/core/layout/css */
 			weight: '00'
 		});
@@ -366,20 +366,16 @@ winkstart.module('fax_in', 'faxes_in', {
 									
                var columns = [
                 {
-                    'sTitle': 'Дата / Время',
+                    'sTitle': 'Date / Time',
                     'sWidth': '450px'
                 },
 
-           //     {
-          //          'sTitle': 'Набранный номер',
-          //          'sWidth': '350px'
-           //     },
                 {
-                    'sTitle': 'Количество страниц',
+                    'sTitle': 'Pages',
                     'sWidth': '360px'
                 },
                 {
-                    'sTitle': 'Скачать',
+                    'sTitle': 'Download',
                     'sWidth': '260px'
                 },
                 {
